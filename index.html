@@ -37,6 +37,18 @@ tr.h td{background:#dbe7fb}tr.d td{background:#dcf1d3}tr.x td{background:#fbe0c2
 .tot{display:flex;justify-content:flex-end;gap:28px;font-weight:800;font-size:16px;margin-top:12px;flex-wrap:wrap}
 .mut{color:var(--mut)}
 #toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;display:none}
+.mbg{position:fixed;inset:0;background:rgba(10,9,25,.55);display:flex;align-items:center;justify-content:center;padding:16px;z-index:50;animation:fi .15s}
+.mdl{background:#fff;color:var(--ink);border-radius:14px;width:100%;max-width:440px;max-height:90vh;overflow:auto;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.3);animation:up .18s}
+.mdl.wide{max-width:860px}
+.mdl h3{margin:0 0 8px;font-size:17px}.mdl p{margin:0 0 12px}
+.mdl .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;flex-wrap:wrap}
+.mdl .danger{background:#c0392b}
+.mdl label input,.mdl label select{width:100%}
+.map{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:10px 0}
+.prev table{min-width:0;font-size:12px}.prev td{border-bottom:1px solid var(--line)}
+.tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:10px;background:#e9ebf5}.tag.n{background:#dcf1d3}.tag.u{background:#dbe7fb}
+@keyframes fi{from{opacity:0}}@keyframes up{from{transform:translateY(12px);opacity:0}}
+@media(prefers-color-scheme:dark){.mdl{background:#181634;color:#eceefb}.tag{background:#2a2850}.tag.n{background:#1d4a2a}.tag.u{background:#1c3566}}
 @media(prefers-color-scheme:dark){:root{--bg:#0e0d1d;--line:#2a2850;--mut:#9a9dbb;--ink:#eceefb}.card,input,select{background:#181634;color:#eceefb}header{background:#08071a}th{border-color:#2a2850}button.b.g{background:#2a2850;color:#eceefb}tr.h td{background:#1c3566}tr.d td{background:#1d4a2a}tr.x td{background:#5a3a14}.warn{background:#3a3010;border-color:#7a6320}.warn b{color:#f0c24b}.bar{background:#2a2850}}
 </style>
 </head>
@@ -47,9 +59,11 @@ tr.h td{background:#dbe7fb}tr.d td{background:#dcf1d3}tr.x td{background:#fbe0c2
 </header>
 <main id="app"></main>
 <div id="toast"></div>
+<input type="file" id="impf" accept=".csv,.xlsx,.xls,.ods,.tsv,text/csv" hidden onchange="impFile(this)">
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
 /* ===== CONFIG: pegar acá los datos de Supabase (Project Settings > API). Vacío = guarda en el navegador ===== */
@@ -67,6 +81,27 @@ const ars=n=>'$ '+Math.round(n||0).toLocaleString('es-AR');
 const fd=d=>d?d.split('-').reverse().join('/'):'—';
 const toast=m=>{const t=$('#toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',3500)};
 const uid=()=>crypto.randomUUID();
+
+/* ===== modales (reemplazan alert/confirm/prompt) ===== */
+function modal({title='',body='',buttons=[{label:'Aceptar',value:true,cls:'o'}],wide=false,onOpen,collect}){
+  return new Promise(res=>{
+    const bg=document.createElement('div');bg.className='mbg';
+    bg.innerHTML=`<div class="mdl${wide?' wide':''}" role="dialog" aria-modal="true">${title?`<h3>${esc(title)}</h3>`:''}<div class="mb">${body}</div>
+      <div class="acts">${buttons.map((b,i)=>`<button class="b ${b.cls||''}" data-i="${i}">${esc(b.label)}</button>`).join('')}</div></div>`;
+    const box=bg.firstElementChild,prev=document.activeElement;
+    const close=v=>{document.removeEventListener('keydown',key);bg.remove();prev?.focus?.();res(v)};
+    const pick=b=>close(b.value&&collect?collect(box):b.value);
+    const key=e=>{if(e.key==='Escape')close(null);if(e.key==='Enter'&&e.target.tagName==='INPUT'){e.preventDefault();pick(buttons[buttons.length-1])}};
+    box.querySelectorAll('.acts button').forEach(el=>el.onclick=()=>pick(buttons[+el.dataset.i]));
+    bg.onclick=e=>{if(e.target===bg)close(null)};
+    document.addEventListener('keydown',key);document.body.appendChild(bg);
+    onOpen?.(box);(box.querySelector('input,select')||box.querySelector('.acts button:last-child')).focus();
+  });
+}
+const mAlert=(msg,title='Aviso')=>modal({title,body:`<p>${esc(msg)}</p>`,buttons:[{label:'Entendido',value:true,cls:'o'}]});
+const mConfirm=(msg,{title='Confirmar',ok='Aceptar',danger=false}={})=>modal({title,body:`<p>${esc(msg)}</p>`,buttons:[{label:'Cancelar',value:false,cls:'g'},{label:ok,value:true,cls:danger?'danger':'o'}]}).then(Boolean);
+const mPrompt=(title,{label='',value='',ok='Aceptar'}={})=>modal({title,body:`<label>${esc(label)}<input id="mpi" value="${esc(value)}"></label>`,
+  buttons:[{label:'Cancelar',value:null,cls:'g'},{label:ok,value:true,cls:'o'}],collect:b=>b.querySelector('#mpi').value.trim()});
 
 /* ===== datos ===== */
 const persist=()=>localStorage.setItem('nl',JSON.stringify({items:S.items,events:S.events,lines:S.lines}));
@@ -121,17 +156,123 @@ async function loadRates(force){
 /* ===== acciones ===== */
 const setTab=t=>{S.tab=t;render()};
 const setEv=id=>{S.ev=id;render()};
-function newEv(){const n=prompt('Nombre del evento');if(!n)return;const e={id:uid(),name:n,place:'',date_from:null,date_to:null,hours:'',jornadas:1};S.events.push(e);S.ev=e.id;put('events',e);render()}
-async function delEv(){if(confirm('¿Borrar este evento y su checklist?')){await drop('events',S.ev);S.ev=S.events[0]?.id||null;render()}}
+async function newEv(){const n=await mPrompt('Nuevo evento',{label:'Nombre del evento',ok:'Crear'});if(!n)return;const e={id:uid(),name:n,place:'',date_from:null,date_to:null,hours:'',jornadas:1};S.events.push(e);S.ev=e.id;put('events',e);render()}
+async function delEv(){if(await mConfirm('Se borra el evento "'+(cur()?.name||'')+'" y todo su checklist.',{title:'¿Borrar evento?',ok:'Borrar',danger:true})){await drop('events',S.ev);S.ev=S.events[0]?.id||null;render()}}
 function evSet(f,v){const e=cur();e[f]=(f==='date_from'||f==='date_to')?(v||null):(f==='jornadas'?Math.max(1,+v||1):v);put('events',e);render()}
 function addLine(){const id=$('#addsel').value;if(!id||!S.ev)return;const l={id:uid(),event_id:S.ev,item_id:id,qty:1,loc:'Hotel',got:false,hotel:0,depot:0,price:null};S.lines.push(l);put('lines',l);render()}
 function lnSet(id,f,v){const l=S.lines.find(l=>l.id===id);l[f]=['qty','hotel','depot'].includes(f)?Math.max(0,+v||0):(f==='price'?(v===''?null:+v):(f==='got'?v:v));put('lines',l);render()}
 const lnDel=id=>{drop('lines',id);render()};
 function itAdd(){const n=$('#in').value.trim();if(!n)return;const i={id:uid(),name:n,hotel:+$('#ih').value||0,depot:+$('#id').value||0,price:+$('#ip').value||0};S.items.push(i);put('items',i);render()}
 function itSet(id,f,v){const i=S.items.find(i=>i.id===id);i[f]=f==='name'?v:+v||0;put('items',i);render()}
-const itDel=id=>{if(confirm('¿Borrar del inventario? Se quita de todos los eventos.')){drop('items',id);S.lines=S.lines.filter(l=>l.item_id!==id);render()}};
+const itDel=async id=>{if(await mConfirm('"'+(S.items.find(i=>i.id===id)?.name||'')+'" se quita del inventario y de todos los eventos.',{title:'¿Borrar equipo?',ok:'Borrar',danger:true})){drop('items',id);S.lines=S.lines.filter(l=>l.item_id!==id);render()}};
 const setSrc=v=>{S.src=v;localStorage.setItem('nl_src',v);render()};
 const setMan=v=>{S.manual=+v||0;localStorage.setItem('nl_man',S.manual);render()};
+
+/* ===== importar stock (CSV / XLSX) ===== */
+const norm=s=>String(s??'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+const FIELDS={name:'Nombre del equipo',hotel:'Stock en hotel',depot:'Stock en depósito',total:'Cantidad / stock total',price:'Precio USD / jornada'};
+const KEYS={
+  name:['equipo','nombre','descripcion','detalle','item','producto','articulo','material','modelo','concepto','name','description','product'],
+  hotel:['hotel','salon','en hotel','sede'],
+  depot:['deposito','almacen','galpon','bodega','oficina','warehouse','en deposito'],
+  total:['cantidad','cant','stock','total','unidades','qty','quantity','existencia','disponible','un'],
+  price:['precio','usd','valor','costo','tarifa','jornada','importe','price','u s','dolar','alquiler']};
+function parseNum(v){
+  if(typeof v==='number')return v;let s=String(v??'').replace(/[^0-9,.\-]/g,'');if(!s)return NaN;
+  const c=s.lastIndexOf(','),d=s.lastIndexOf('.');
+  if(c>-1&&d>-1)s=c>d?s.replace(/\./g,'').replace(',','.'):s.replace(/,/g,'');
+  else if(c>-1)s=/^-?\d{1,3}(,\d{3})+$/.test(s)?s.replace(/,/g,''):s.replace(',','.');
+  else if(/^-?\d{1,3}(\.\d{3})+$/.test(s))s=s.replace(/\./g,'');
+  return parseFloat(s);
+}
+function scoreHeader(h,f){const n=norm(h);if(!n)return 0;let best=0;for(const k of KEYS[f]){if(n===k)best=Math.max(best,3);else if(new RegExp('(^| )'+k+'( |$)').test(n))best=Math.max(best,2);else if(n.includes(k))best=Math.max(best,1)}return best}
+function analyze(rows){
+  rows=rows.filter(r=>r.some(c=>String(c??'').trim()!==''));
+  // fila de encabezados: la de mayor puntaje dentro de las primeras 15
+  let hi=0,hs=-1;
+  rows.slice(0,15).forEach((r,i)=>{const sc=r.reduce((a,c)=>a+Math.max(...Object.keys(KEYS).map(f=>scoreHeader(c,f))),0);if(sc>hs){hs=sc;hi=i}});
+  let head=rows[hi]||[],data=rows.slice(hi+1);
+  if(hs<=0){head=(rows[0]||[]).map((_,i)=>'Columna '+(i+1));data=rows;}
+  const n=Math.max(head.length,...data.map(r=>r.length));
+  head=Array.from({length:n},(_,i)=>String(head[i]??'').trim()||'Columna '+(i+1));
+  // perfil de cada columna
+  const prof=head.map((_,i)=>{const vals=data.map(r=>r[i]).filter(v=>String(v??'').trim()!=='');const nums=vals.filter(v=>!isNaN(parseNum(v))&&!/[a-z]{3,}/i.test(String(v).replace(/usd|u\$s|\$/ig,'')));
+    return{fill:vals.length,num:vals.length?nums.length/vals.length:0,dec:nums.some(v=>parseNum(v)%1!==0),money:vals.some(v=>/\$|usd|u\$s/i.test(String(v))),avg:nums.length?nums.reduce((a,v)=>a+parseNum(v),0)/nums.length:0,len:vals.length?vals.reduce((a,v)=>a+String(v).length,0)/vals.length:0}});
+  const map={},taken=new Set();
+  for(const f of['name','price','hotel','depot','total']){
+    let best=-1,bs=0;head.forEach((h,i)=>{if(taken.has(i))return;let sc=scoreHeader(h,f)*10;
+      if(f==='name')sc+=sc?(1-prof[i].num)*5:0;else if(sc)sc+=prof[i].num*5;
+      if(f==='price'&&sc&&(prof[i].dec||prof[i].money))sc+=3;
+      if(sc>bs){bs=sc;best=i}});
+    if(best>-1){map[f]=best;taken.add(best)}
+  }
+  // heurística si faltan encabezados reconocibles
+  if(map.name==null){let b=-1,bl=0;prof.forEach((p,i)=>{if(!taken.has(i)&&p.num<.5&&p.len>bl){bl=p.len;b=i}});if(b>-1){map.name=b;taken.add(b)}}
+  if(map.hotel==null&&map.depot==null&&map.total==null){const q=prof.map((p,i)=>i).filter(i=>!taken.has(i)&&prof[i].num>.7&&!prof[i].dec&&!prof[i].money);if(q.length){map.total=q[0];taken.add(q[0])}}
+  if(map.price==null){const q=prof.map((p,i)=>i).filter(i=>!taken.has(i)&&prof[i].num>.7&&(prof[i].dec||prof[i].money||prof[i].avg>20));if(q.length){map.price=q[0];taken.add(q[0])}}
+  return{head,data,map};
+}
+async function readSheet(file){
+  if(!window.XLSX)throw new Error('No se cargó la librería de Excel (revisá la conexión).');
+  const buf=await file.arrayBuffer();
+  const wb=/\.(csv|tsv|txt)$/i.test(file.name)?XLSX.read(new TextDecoder('utf-8').decode(buf).replace(/^\ufeff/,''),{type:'string',raw:true}):XLSX.read(buf,{type:'array'});
+  return wb.SheetNames.map(n=>({name:n,rows:XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:'',raw:true})})).filter(s=>s.rows.length);
+}
+async function impFile(inp){
+  const f=inp.files[0];inp.value='';if(!f)return;
+  let sheets;try{sheets=await readSheet(f)}catch(e){return mAlert('No pude leer el archivo: '+e.message,'Error al importar')}
+  if(!sheets.length)return mAlert('El archivo está vacío.','Error al importar');
+  let si=0;
+  if(sheets.length>1){const r=await modal({title:'Elegí la hoja',body:`<label>Hoja del archivo<select id="shs">${sheets.map((s,i)=>`<option value="${i}">${esc(s.name)} (${s.rows.length} filas)</option>`).join('')}</select></label>`,
+    buttons:[{label:'Cancelar',value:null,cls:'g'},{label:'Continuar',value:true,cls:'o'}],collect:b=>+b.querySelector('#shs').value});if(r==null)return;si=r}
+  const A=analyze(sheets[si].rows);
+  if(!A.data.length)return mAlert('No encontré filas de datos debajo de los encabezados.','Error al importar');
+  const opt=sel=>`<option value="">— no importar —</option>`+A.head.map((h,i)=>`<option value="${i}" ${sel===i?'selected':''}>${esc(h)}</option>`).join('');
+  const body=`<p class="mut">Detecté <b>${A.data.length}</b> filas en <b>${esc(f.name)}</b>. Revisá qué columna va a cada campo:</p>
+   <div class="map">${Object.entries(FIELDS).map(([k,v])=>`<label>${v}<select data-f="${k}">${opt(A.map[k])}</select></label>`).join('')}</div>
+   <div class="map"><label>Cantidad total va a<select id="tdst"><option value="depot">Depósito</option><option value="hotel">Hotel</option></select></label>
+    <label>Si el equipo ya existe<select id="mode"><option value="set">Reemplazar stock y precio</option><option value="add">Sumar al stock actual</option><option value="skip">No tocarlo</option></select></label></div>
+   <div class="prev" id="prev"></div>`;
+  const build=box=>{
+    const m={};box.querySelectorAll('[data-f]').forEach(s=>m[s.dataset.f]=s.value===''?null:+s.value);
+    const tdst=box.querySelector('#tdst').value,mode=box.querySelector('#mode').value,byName=new Map(S.items.map(i=>[norm(i.name),i]));
+    const seen=new Map(),out=[];
+    for(const r of A.data){
+      const name=m.name!=null?String(r[m.name]??'').trim():'';if(!name)continue;
+      const num=c=>{if(c==null)return null;const v=parseNum(r[c]);return isNaN(v)?null:v};
+      let hotel=num(m.hotel),depot=num(m.depot);const tot=num(m.total),pr=num(m.price);
+      if(tot!=null&&hotel==null&&depot==null){if(tdst==='hotel')hotel=tot;else depot=tot}
+      else if(tot!=null&&(hotel==null)!==(depot==null)){if(hotel==null)hotel=Math.max(0,tot-depot);else depot=Math.max(0,tot-hotel)}
+      const k=norm(name);
+      if(seen.has(k)){const o=seen.get(k);o.hotel=(o.hotel??0)+(hotel??0)||o.hotel;o.depot=(o.depot??0)+(depot??0)||o.depot;if(pr!=null)o.price=pr;continue}
+      const o={name,hotel,depot,price:pr,ex:byName.get(k)};seen.set(k,o);out.push(o);
+    }
+    return{rows:out,mode,m};
+  };
+  const preview=box=>{const{rows,mode,m}=build(box),n=rows.filter(r=>!r.ex).length,u=rows.length-n,f=v=>v==null?'<span class="mut">—</span>':v;
+    box.querySelector('#prev').innerHTML=m.name==null?'<div class="warn"><b>Elegí la columna con el nombre del equipo.</b></div>':
+     `<p><b>${n}</b> nuevos · <b>${u}</b> ya existen${mode==='skip'&&u?' (se saltean)':''}</p>
+     <table><tr><th></th><th>Equipo</th><th>Hotel</th><th>Depósito</th><th>USD</th></tr>${rows.slice(0,8).map(r=>`<tr><td><span class="tag ${r.ex?'u':'n'}">${r.ex?'existe':'nuevo'}</span></td><td>${esc(r.name)}</td><td>${f(r.hotel)}</td><td>${f(r.depot)}</td><td>${f(r.price)}</td></tr>`).join('')}</table>
+     ${rows.length>8?`<p class="mut">…y ${rows.length-8} más</p>`:''}`};
+  const res=await modal({title:'Importar stock',wide:true,body,
+    buttons:[{label:'Cancelar',value:null,cls:'g'},{label:'Importar',value:true,cls:'o'}],
+    onOpen:box=>{box.querySelectorAll('select').forEach(s=>s.onchange=()=>preview(box));preview(box)},collect:build});
+  if(!res)return;
+  if(res.m.name==null)return mAlert('No se importó nada: faltó elegir la columna del nombre.','Importación cancelada');
+  const changed=[];let nw=0,up=0,sk=0;
+  for(const r of res.rows){
+    if(r.ex){
+      if(res.mode==='skip'){sk++;continue}
+      const it=r.ex;
+      if(res.mode==='add'){if(r.hotel!=null)it.hotel=(+it.hotel||0)+r.hotel;if(r.depot!=null)it.depot=(+it.depot||0)+r.depot}
+      else{if(r.hotel!=null)it.hotel=r.hotel;if(r.depot!=null)it.depot=r.depot}
+      if(r.price!=null)it.price=r.price;changed.push(it);up++;
+    }else{const it={id:uid(),name:r.name,hotel:Math.max(0,r.hotel||0),depot:Math.max(0,r.depot||0),price:Math.max(0,r.price||0)};S.items.push(it);changed.push(it);nw++}
+  }
+  if(sb&&changed.length){const{error}=await sb.from('items').upsert(changed.map(({id,name,hotel,depot,price})=>({id,name,hotel,depot,price})));if(error)await mAlert('Se cargó en pantalla pero falló Supabase: '+error.message,'Error al guardar')}else persist();
+  render();
+  mAlert(`${nw} equipos nuevos, ${up} actualizados`+(sk?`, ${sk} salteados`:'')+'.','Importación lista');
+}
 
 /* ===== vistas ===== */
 function evPicker(){
@@ -164,7 +305,7 @@ function vEvento(){
   <div class="row" style="margin-top:12px"><label>Agregar equipo<select id="addsel"><option value="">Elegí del inventario…</option>${free.map(i=>`<option value="${i.id}">${esc(i.name)}</option>`).join('')}</select></label><button class="b" onclick="addLine()">Agregar al checklist</button></div></div>`;
 }
 function vInv(){
-  return `<div class="card"><h2>Inventario</h2>
+  return `<div class="card"><div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px"><h2 style="margin:0">Inventario</h2><button class="b o" onclick="$('#impf').click()">Importar CSV / Excel</button></div>
   <table><tr><th>Equipo</th><th>Hotel</th><th>Depósito</th><th>Total</th><th>USD / jornada</th><th></th></tr>
   ${S.items.map(i=>`<tr><td><input style="width:100%" value="${esc(i.name)}" onchange="itSet('${i.id}','name',this.value)"></td>
    <td><input type="number" min="0" value="${i.hotel}" onchange="itSet('${i.id}','hotel',this.value)"></td>
@@ -206,7 +347,7 @@ function loadLogo(){return new Promise(res=>{const q=[...LOGOS];const n=()=>{con
   im.onerror=n;im.src=u};n()})}
 async function pdf(){
   const ev=cur(),al=alerts(ev);
-  if(al.length&&!confirm('Hay alertas de stock en este evento. ¿Generar el PDF igual?'))return;
+  if(al.length&&!await modal({title:'Hay alertas de stock',body:`<p>Faltan equipos para este evento:</p><ul style="padding-left:18px;margin:0">${al.map(a=>`<li>${esc(a.msg)}</li>`).join('')}</ul>`,buttons:[{label:'Cancelar',value:false,cls:'g'},{label:'Generar igual',value:true,cls:'o'}]}))return;
   const T=totals(ev),r=rate(),{jsPDF}=window.jspdf,doc=new jsPDF(),W=210,logo=await loadLogo();
   doc.setFillColor(20,18,43);doc.rect(0,0,W,28,'F');
   if(logo)doc.addImage(logo.d,'PNG',14,7,14*logo.r>60?60:14*logo.r,14*logo.r>60?60/logo.r:14);
