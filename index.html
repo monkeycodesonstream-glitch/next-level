@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Next Level · Operaciones</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#14122b;--or:#f28c28;--bl:#3b6fe0;--bg:#f4f5fa;--line:#dfe2ee;--mut:#6b6f85}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.45 Manrope,system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:var(--ink);display:flex;align-items:center;gap:24px;padding:12px 20px;flex-wrap:wrap}
+header img{height:34px}
+nav{display:flex;gap:4px;margin-left:auto}
+nav button{background:none;border:0;color:#b9bcd6;font:600 14px Manrope;padding:8px 14px;border-radius:8px;cursor:pointer}
+nav button.on{background:var(--or);color:#fff}
+main{max-width:1100px;margin:0 auto;padding:20px}
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px;overflow-x:auto}
+h2{margin:0 0 12px;font-size:18px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+label{display:flex;flex-direction:column;font-size:12px;color:var(--mut);gap:3px}
+input,select{font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink)}
+input[type=number]{width:80px}
+input[type=checkbox]{width:20px;height:20px;accent-color:var(--or)}
+button.b{background:var(--bl);color:#fff;border:0;border-radius:8px;padding:8px 14px;font:600 13px Manrope;cursor:pointer}
+button.b.o{background:var(--or)}button.b.g{background:#e9ebf5;color:var(--ink)}
+button.x{background:none;border:0;color:#c0392b;cursor:pointer;font-size:16px}
+table{width:100%;border-collapse:collapse;min-width:680px}
+th{text-align:left;font-size:12px;color:var(--mut);padding:6px 8px;border-bottom:2px solid var(--line)}
+td{padding:6px 8px;border-bottom:1px solid #fff}
+tr.h td{background:#dbe7fb}tr.d td{background:#dcf1d3}tr.x td{background:#fbe0c2}
+.warn{background:#fff3cd;border:1px solid #f0c24b;border-radius:10px;padding:10px 14px;margin-bottom:14px}
+.warn b{color:#9a6700}
+.bar{height:8px;background:#e9ebf5;border-radius:6px;overflow:hidden;margin:8px 0}
+.bar i{display:block;height:100%;background:var(--or)}
+.tot{display:flex;justify-content:flex-end;gap:28px;font-weight:800;font-size:16px;margin-top:12px;flex-wrap:wrap}
+.mut{color:var(--mut)}
+#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;display:none}
+@media(prefers-color-scheme:dark){:root{--bg:#0e0d1d;--line:#2a2850;--mut:#9a9dbb;--ink:#eceefb}.card,input,select{background:#181634;color:#eceefb}header{background:#08071a}th{border-color:#2a2850}button.b.g{background:#2a2850;color:#eceefb}tr.h td{background:#1c3566}tr.d td{background:#1d4a2a}tr.x td{background:#5a3a14}.warn{background:#3a3010;border-color:#7a6320}.warn b{color:#f0c24b}.bar{background:#2a2850}}
+</style>
+</head>
+<body>
+<header>
+  <img id="logo" src="logo.svg" alt="Next Level" onerror="this.onerror=null;this.src='https://nextlevel.com.ar/wp-content/uploads/2023/03/logo-inicial-1.svg'">
+  <nav id="nav"></nav>
+</header>
+<main id="app"></main>
+<div id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+/* ===== CONFIG: pegar acá los datos de Supabase (Project Settings > API). Vacío = guarda en el navegador ===== */
+const CFG={SUPABASE_URL:'',SUPABASE_KEY:''};
+const LOGOS=['logo.png','logo.svg','https://nextlevel.com.ar/wp-content/uploads/2023/03/logo-inicial-1.svg'];
+
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const LOCS=['Hotel','Depósito','Proveedor externo'],CLS={'Hotel':'h','Depósito':'d','Proveedor externo':'x'};
+const RATES={blue:'Blue',tarjeta:'Tarjeta',oficial:'Oficial',bolsa:'MEP',contadoconliqui:'CCL',mayorista:'Mayorista',cripto:'Cripto'};
+const S={items:[],events:[],lines:[],ev:null,tab:'evento',rates:[],src:localStorage.getItem('nl_src')||'blue',manual:+localStorage.getItem('nl_man')||0};
+const sb=(CFG.SUPABASE_URL&&window.supabase)?supabase.createClient(CFG.SUPABASE_URL,CFG.SUPABASE_KEY):null;
+const usd=n=>'USD '+(+n||0).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const ars=n=>'$ '+Math.round(n||0).toLocaleString('es-AR');
+const fd=d=>d?d.split('-').reverse().join('/'):'—';
+const toast=m=>{const t=$('#toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',3500)};
+const uid=()=>crypto.randomUUID();
+
+/* ===== datos ===== */
+const persist=()=>localStorage.setItem('nl',JSON.stringify({items:S.items,events:S.events,lines:S.lines}));
+async function put(t,row){if(sb){const{error}=await sb.from(t).upsert(row);if(error)toast('Error al guardar: '+error.message)}else persist()}
+async function drop(t,id){S[t]=S[t].filter(r=>r.id!==id);if(t==='events')S.lines=S.lines.filter(l=>l.event_id!==id);if(sb)await sb.from(t).delete().eq('id',id);else persist()}
+async function load(){
+  if(sb){for(const t of['items','events','lines']){const{data,error}=await sb.from(t).select('*').order('id');if(error)toast('Supabase: '+error.message);S[t]=data||[]}}
+  else Object.assign(S,JSON.parse(localStorage.getItem('nl')||'{}'));
+  S.items=S.items||[];S.events=S.events||[];S.lines=S.lines||[];
+  S.ev=S.events[0]?.id||null;
+}
+async function seed(){
+  const mk=(name,hotel,depot,price)=>({id:uid(),name,hotel,depot,price});
+  const its=[mk('Pantalla LED P2.6 – 8,00 x 2,00 m (panorámica)',0,0,0),mk('Pantalla LED P2.6 – 1,00 x 2,50 m (vertical)',0,0,0),mk('Pantalla LED P2.6 – 1,00 x 2,00 m (vertical)',0,0,0),
+   mk('Distribuidores y conversores digitales (DECIMATOR & Black Magic)',1,0,0),mk('Cableado digital (SDI & HDMI)',1,0,70),mk('Tablero eléctrico',1,0,0),
+   mk('Seamless Switcher Blackmagic ATEM 2 M/E Constellation HD',1,0,0),mk('Monitor de previsualización',3,0,0),mk('Stream Deck MK1 15 botones',0,2,0),
+   mk('Portátil de control (ATEM)',1,0,0),mk('Arena Production Server con licencia',0,1,0),mk('Interfaz de audio USB (Focusrite Scarlett 2i2 o similar)',1,0,0)];
+  const ev={id:uid(),name:'Novoriente (Reunión CATL)',place:'Four Seasons – Salón Félix',date_from:'2026-10-28',date_to:'2026-10-29',hours:'13:00 a 15:00 hs',jornadas:1};
+  const spec=[[0,1,'Proveedor externo'],[1,2,'Proveedor externo'],[2,2,'Proveedor externo'],[3,1,'Hotel'],[4,1,'Hotel'],[5,1,'Hotel'],[6,1,'Hotel'],[7,1,'Hotel'],[8,1,'Depósito'],[9,1,'Hotel'],[10,1,'Depósito'],[7,2,'Hotel'],[11,1,'Hotel']];
+  S.items=its;S.events=[ev];S.ev=ev.id;
+  S.lines=spec.map(([i,q,loc])=>({id:uid(),event_id:ev.id,item_id:its[i].id,qty:q,loc,got:false,hotel:0,depot:0,price:null}));
+  S.lines=S.lines.filter((l,i,a)=>a.findIndex(o=>o.item_id===l.item_id)===i);
+  if(sb){for(const t of['items','events','lines'])for(const r of S[t])await put(t,r)}else persist();
+  render();
+}
+
+/* ===== lógica ===== */
+const cur=()=>S.events.find(e=>e.id===S.ev);
+const price=l=>l.price??S.items.find(i=>i.id===l.item_id)?.price??0;
+function alerts(ev){
+  const out=[];
+  for(const l of S.lines.filter(l=>l.event_id===ev.id&&l.loc!=='Proveedor externo')){
+    const it=S.items.find(i=>i.id===l.item_id);if(!it)continue;
+    const stock=(+it.hotel||0)+(+it.depot||0);
+    const others=S.lines.filter(o=>o.item_id===l.item_id&&o.id!==l.id&&o.loc!=='Proveedor externo')
+      .map(o=>({o,e:S.events.find(e=>e.id===o.event_id)}))
+      .filter(x=>x.e&&x.e.id!==ev.id&&x.e.date_from&&ev.date_from&&x.e.date_from<=ev.date_to&&ev.date_from<=x.e.date_to);
+    const used=others.reduce((a,x)=>a+(+x.o.qty||0),0);
+    if((+l.qty||0)+used>stock)out.push({line:l.id,msg:`${it.name}: necesitás ${l.qty}, hay ${stock} en stock`+(used?` y ${used} ya están en uso en ${others.map(x=>x.e.name+' ('+fd(x.e.date_from)+'–'+fd(x.e.date_to)+')').join(', ')}`:'')});
+  }
+  return out;
+}
+const rate=()=>S.src==='manual'?S.manual:(S.rates.find(r=>r.casa===S.src)?.venta||0);
+async function loadRates(force){
+  const day=new Date().toISOString().slice(0,10),c=JSON.parse(localStorage.getItem('nl_rates')||'null');
+  if(c&&c.day===day&&!force){S.rates=c.data;return}
+  try{const r=await fetch('https://dolarapi.com/v1/dolares');S.rates=await r.json();localStorage.setItem('nl_rates',JSON.stringify({day,data:S.rates}))}
+  catch(e){if(c)S.rates=c.data;toast('No se pudo actualizar el dólar; uso el último guardado')}
+  render();
+}
+
+/* ===== acciones ===== */
+const setTab=t=>{S.tab=t;render()};
+const setEv=id=>{S.ev=id;render()};
+function newEv(){const n=prompt('Nombre del evento');if(!n)return;const e={id:uid(),name:n,place:'',date_from:null,date_to:null,hours:'',jornadas:1};S.events.push(e);S.ev=e.id;put('events',e);render()}
+async function delEv(){if(confirm('¿Borrar este evento y su checklist?')){await drop('events',S.ev);S.ev=S.events[0]?.id||null;render()}}
+function evSet(f,v){const e=cur();e[f]=(f==='date_from'||f==='date_to')?(v||null):(f==='jornadas'?Math.max(1,+v||1):v);put('events',e);render()}
+function addLine(){const id=$('#addsel').value;if(!id||!S.ev)return;const l={id:uid(),event_id:S.ev,item_id:id,qty:1,loc:'Hotel',got:false,hotel:0,depot:0,price:null};S.lines.push(l);put('lines',l);render()}
+function lnSet(id,f,v){const l=S.lines.find(l=>l.id===id);l[f]=['qty','hotel','depot'].includes(f)?Math.max(0,+v||0):(f==='price'?(v===''?null:+v):(f==='got'?v:v));put('lines',l);render()}
+const lnDel=id=>{drop('lines',id);render()};
+function itAdd(){const n=$('#in').value.trim();if(!n)return;const i={id:uid(),name:n,hotel:+$('#ih').value||0,depot:+$('#id').value||0,price:+$('#ip').value||0};S.items.push(i);put('items',i);render()}
+function itSet(id,f,v){const i=S.items.find(i=>i.id===id);i[f]=f==='name'?v:+v||0;put('items',i);render()}
+const itDel=id=>{if(confirm('¿Borrar del inventario? Se quita de todos los eventos.')){drop('items',id);S.lines=S.lines.filter(l=>l.item_id!==id);render()}};
+const setSrc=v=>{S.src=v;localStorage.setItem('nl_src',v);render()};
+const setMan=v=>{S.manual=+v||0;localStorage.setItem('nl_man',S.manual);render()};
+
+/* ===== vistas ===== */
+function evPicker(){
+  return `<div class="row"><label>Evento<select onchange="setEv(this.value)">${S.events.map(e=>`<option value="${e.id}" ${e.id===S.ev?'selected':''}>${esc(e.name)}</option>`).join('')}</select></label>
+  <button class="b" onclick="newEv()">Nuevo evento</button>${S.ev?'<button class="b g" onclick="delEv()">Borrar evento</button>':''}</div>`;
+}
+function warnBox(al){return al.length?`<div class="warn"><b>Alerta de stock</b><ul style="margin:6px 0 0;padding-left:18px">${al.map(a=>`<li>${esc(a.msg)}</li>`).join('')}</ul></div>`:''}
+function vEvento(){
+  const ev=cur();
+  if(!ev)return `<div class="card"><h2>Todavía no hay eventos</h2>${evPicker()}<p class="mut">Creá el primero o cargá los datos de ejemplo.</p><button class="b o" onclick="seed()">Cargar ejemplo (Novoriente)</button></div>`;
+  const ls=S.lines.filter(l=>l.event_id===ev.id),al=alerts(ev),done=ls.filter(l=>l.got).length;
+  const used=new Set(ls.map(l=>l.item_id)),free=S.items.filter(i=>!used.has(i.id));
+  return `<div class="card"><h2>Checklist del evento</h2>${evPicker()}
+  <div class="row" style="margin-top:12px">
+   <label>Lugar<input value="${esc(ev.place)}" onchange="evSet('place',this.value)"></label>
+   <label>Armado<input type="date" value="${ev.date_from||''}" onchange="evSet('date_from',this.value)"></label>
+   <label>Evento<input type="date" value="${ev.date_to||''}" onchange="evSet('date_to',this.value)"></label>
+   <label>Horario<input value="${esc(ev.hours)}" onchange="evSet('hours',this.value)"></label></div></div>
+  ${warnBox(al)}
+  <div class="card"><b>${done} de ${ls.length} equipos listos</b><div class="bar"><i style="width:${ls.length?done/ls.length*100:0}%"></i></div>
+  <table><tr><th>Listo</th><th>Equipo</th><th>Cant.</th><th>Ubicación</th><th>En hotel</th><th>En depósito</th><th></th></tr>
+  ${ls.map(l=>{const it=S.items.find(i=>i.id===l.item_id);const a=al.find(a=>a.line===l.id);return `<tr class="${CLS[l.loc]}">
+   <td><input type="checkbox" ${l.got?'checked':''} onchange="lnSet('${l.id}','got',this.checked)"></td>
+   <td>${a?`<span title="${esc(a.msg)}">⚠️ </span>`:''}${esc(it?.name)}</td>
+   <td><input type="number" min="0" value="${l.qty}" onchange="lnSet('${l.id}','qty',this.value)"></td>
+   <td><select onchange="lnSet('${l.id}','loc',this.value)">${LOCS.map(o=>`<option ${o===l.loc?'selected':''}>${o}</option>`).join('')}</select></td>
+   <td><input type="number" min="0" value="${l.hotel}" onchange="lnSet('${l.id}','hotel',this.value)"></td>
+   <td><input type="number" min="0" value="${l.depot}" onchange="lnSet('${l.id}','depot',this.value)"></td>
+   <td><button class="x" onclick="lnDel('${l.id}')" title="Quitar">✕</button></td></tr>`}).join('')}</table>
+  <div class="row" style="margin-top:12px"><label>Agregar equipo<select id="addsel"><option value="">Elegí del inventario…</option>${free.map(i=>`<option value="${i.id}">${esc(i.name)}</option>`).join('')}</select></label><button class="b" onclick="addLine()">Agregar al checklist</button></div></div>`;
+}
+function vInv(){
+  return `<div class="card"><h2>Inventario</h2>
+  <table><tr><th>Equipo</th><th>Hotel</th><th>Depósito</th><th>Total</th><th>USD / jornada</th><th></th></tr>
+  ${S.items.map(i=>`<tr><td><input style="width:100%" value="${esc(i.name)}" onchange="itSet('${i.id}','name',this.value)"></td>
+   <td><input type="number" min="0" value="${i.hotel}" onchange="itSet('${i.id}','hotel',this.value)"></td>
+   <td><input type="number" min="0" value="${i.depot}" onchange="itSet('${i.id}','depot',this.value)"></td>
+   <td><b>${(+i.hotel||0)+(+i.depot||0)}</b></td>
+   <td><input type="number" min="0" step="0.01" style="width:100px" value="${i.price}" onchange="itSet('${i.id}','price',this.value)"></td>
+   <td><button class="x" onclick="itDel('${i.id}')">✕</button></td></tr>`).join('')}</table>
+  ${S.items.length?'':'<p class="mut">Sin equipos todavía.</p>'}
+  <div class="row" style="margin-top:14px"><label>Nuevo equipo<input id="in" style="width:300px"></label><label>Hotel<input id="ih" type="number" min="0" value="0"></label><label>Depósito<input id="id" type="number" min="0" value="0"></label><label>USD<input id="ip" type="number" min="0" step="0.01" value="0" style="width:100px"></label><button class="b" onclick="itAdd()">Agregar</button></div>
+  ${S.items.length?'':'<p><button class="b o" onclick="seed()">Cargar ejemplo</button></p>'}</div>`;
+}
+function totals(ev){const ls=S.lines.filter(l=>l.event_id===ev.id);const sub=ls.reduce((a,l)=>a+(+l.qty||0)*price(l),0);const t=sub*(ev.jornadas||1);return{ls,sub,t,ars:t*rate()}}
+function vCot(){
+  const ev=cur();
+  if(!ev)return `<div class="card"><h2>Cotizador</h2>${evPicker()}</div>`;
+  const T=totals(ev),al=alerts(ev),r=rate(),rd=S.rates.find(x=>x.casa===S.src)?.fechaActualizacion;
+  return `<div class="card"><h2>Cotizador</h2>${evPicker()}
+  <div class="row" style="margin-top:12px">
+   <label>Dólar<select onchange="setSrc(this.value)">${Object.entries(RATES).map(([k,v])=>`<option value="${k}" ${S.src===k?'selected':''}>${v}</option>`).join('')}<option value="manual" ${S.src==='manual'?'selected':''}>Manual</option></select></label>
+   ${S.src==='manual'?`<label>Cotización<input type="number" value="${S.manual}" onchange="setMan(this.value)"></label>`:`<label>Venta<input disabled value="${r?ars(r):'sin datos'}" style="width:110px"></label>`}
+   <label>Jornadas<input type="number" min="1" value="${ev.jornadas||1}" onchange="evSet('jornadas',this.value)"></label>
+   <button class="b g" onclick="loadRates(true)">Actualizar dólar</button></div>
+   <p class="mut" style="margin:8px 0 0">${rd?'Actualizado: '+new Date(rd).toLocaleString('es-AR'):'Se actualiza solo una vez por día (dolarapi.com).'}</p></div>
+  ${warnBox(al)}
+  <div class="card"><table><tr><th>Cant.</th><th>Descripción</th><th>USD / jornada</th><th>Subtotal</th></tr>
+  ${T.ls.map(l=>{const it=S.items.find(i=>i.id===l.item_id);return `<tr><td>${l.qty}</td><td>${esc(it?.name)}</td>
+   <td><input type="number" min="0" step="0.01" style="width:100px" value="${price(l)}" onchange="lnSet('${l.id}','price',this.value)"></td><td>${usd((+l.qty||0)*price(l))}</td></tr>`}).join('')}</table>
+  <div class="tot"><span>Total ${ev.jornadas>1?ev.jornadas+' jornadas':'jornada'}: ${usd(T.t)}</span><span>${r?ars(T.ars):'—'}</span></div>
+  <div style="text-align:right;margin-top:14px"><button class="b o" onclick="pdf()">Descargar presupuesto PDF</button></div></div>`;
+}
+function render(){
+  $('#nav').innerHTML=[['evento','Checklist'],['inv','Inventario'],['cot','Cotizador']].map(([k,v])=>`<button class="${S.tab===k?'on':''}" onclick="setTab('${k}')">${v}</button>`).join('');
+  $('#app').innerHTML=(sb?'':'<p class="mut" style="margin-top:0">Modo local: los datos se guardan solo en este navegador. Conectá Supabase para compartirlos entre operadores.</p>')+({evento:vEvento,inv:vInv,cot:vCot}[S.tab])();
+}
+
+/* ===== PDF ===== */
+function loadLogo(){return new Promise(res=>{const q=[...LOGOS];const n=()=>{const u=q.shift();if(!u)return res(null);const im=new Image();im.crossOrigin='anonymous';
+  im.onload=()=>{try{const w=im.naturalWidth||300,h=im.naturalHeight||100,c=document.createElement('canvas');c.width=w*3;c.height=h*3;c.getContext('2d').drawImage(im,0,0,c.width,c.height);res({d:c.toDataURL('image/png'),r:w/h})}catch(e){n()}};
+  im.onerror=n;im.src=u};n()})}
+async function pdf(){
+  const ev=cur(),al=alerts(ev);
+  if(al.length&&!confirm('Hay alertas de stock en este evento. ¿Generar el PDF igual?'))return;
+  const T=totals(ev),r=rate(),{jsPDF}=window.jspdf,doc=new jsPDF(),W=210,logo=await loadLogo();
+  doc.setFillColor(20,18,43);doc.rect(0,0,W,28,'F');
+  if(logo)doc.addImage(logo.d,'PNG',14,7,14*logo.r>60?60:14*logo.r,14*logo.r>60?60/logo.r:14);
+  else{doc.setTextColor(255);doc.setFontSize(18);doc.setFont(undefined,'bold');doc.text('NEXT LEVEL',14,18)}
+  doc.setTextColor(255);doc.setFontSize(10);doc.setFont(undefined,'normal');doc.text('Presupuesto audiovisual',W-14,17,{align:'right'});
+  doc.setTextColor(20,18,43);doc.setFontSize(15);doc.setFont(undefined,'bold');doc.text(ev.name,14,40);
+  doc.setFontSize(10);doc.setFont(undefined,'normal');
+  const info=[ev.place,ev.date_from?'Armado: '+fd(ev.date_from):'',ev.date_to?'Evento: '+fd(ev.date_to):'',ev.hours?'Horario: '+ev.hours:''].filter(Boolean);
+  info.forEach((t,i)=>doc.text(t,14,47+i*5));
+  doc.autoTable({startY:50+info.length*5,head:[['Cant.','Descripción','Valor jornada','Subtotal']],
+    body:T.ls.map(l=>[l.qty,S.items.find(i=>i.id===l.item_id)?.name||'',usd(price(l)),usd((+l.qty||0)*price(l))]),
+    headStyles:{fillColor:[242,140,40]},styles:{fontSize:9},columnStyles:{0:{cellWidth:16},2:{halign:'right',cellWidth:32},3:{halign:'right',cellWidth:32}}});
+  let y=doc.lastAutoTable.finalY+10;doc.setFontSize(11);doc.setFont(undefined,'bold');
+  doc.text(`Total ${ev.jornadas>1?ev.jornadas+' jornadas':'jornada'}: ${usd(T.t)}`,W-14,y,{align:'right'});
+  if(r){y+=7;doc.text(`${ars(T.ars)}`,W-14,y,{align:'right'});y+=6;doc.setFont(undefined,'normal');doc.setFontSize(8.5);
+    doc.text(`Dólar ${S.src==='manual'?'manual':RATES[S.src]} a ${ars(r)} – ${new Date().toLocaleDateString('es-AR')}`,W-14,y,{align:'right'})}
+  doc.setFontSize(8);doc.setTextColor(120);doc.text('Next Level Audiovisual · Ávalos 832, Buenos Aires · nextlevel.com.ar',W/2,288,{align:'center'});
+  doc.save(`Presupuesto - ${ev.name}.pdf`);
+}
+
+(async()=>{await load();render();loadRates()})();
+</script>
+</body>
+</html>
